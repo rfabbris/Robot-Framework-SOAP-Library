@@ -2,8 +2,10 @@ import os
 import logging.config
 import warnings
 import base64
+import netrc
 from .config import DICT_CONFIG
 from requests import Session
+from requests.auth import HTTPBasicAuth
 from zeep import Client
 from zeep.transports import Transport
 from zeep.wsdl.utils import etree
@@ -66,6 +68,8 @@ class SoapLibrary:
         """
         self.url = url
         session = Session()
+        user, password = self._get_credentials(netrc_path=os.getenv('NETRC'))
+        session.auth = HTTPBasicAuth(user, password)
         session.verify = ssl_verify
         self.client = Client(self.url, transport=Transport(session=session))
         logger.info('Connected to: %s' % self.client.wsdl.location)
@@ -306,7 +310,7 @@ class SoapLibrary:
     def _parse_from_unicode(unicode_str):
         """
         Parses a unicode string.
-        
+
         :param unicode_str: unicode string
         :return: parsed string
         """
@@ -333,7 +337,7 @@ class SoapLibrary:
     def _convert_string_to_xml(xml_string):
         """
         Converts a given string to xml object using etree.
-        
+
         :param xml_string: string with xml content
         :return: xml object
         """
@@ -373,3 +377,19 @@ class SoapLibrary:
         log_header_response_from_ws = '<font size="3"><b>Response from webservice:</b></font> '
         logger.info(log_header_response_from_ws, html=True)
         logger.info(etree.tostring(etree_response, pretty_print=True, encoding='unicode'))
+
+    @staticmethod
+    def _get_credentials(host=None, netrc_path=None):
+        login = password = None
+        try:
+            netrc_config = netrc.netrc(file=netrc_path)
+            if not host:
+                host = 'winaproach'
+            if netrc_config.hosts.get(host):
+                login, account, password = netrc_config.hosts[host]
+        except IOError:
+            pass
+        if not login:
+            login = raw_input('user:') if PY2 else input('user:')  # noqa raw_input not allowed with python 3
+            password = getpass.getpass('Password for user %s: ' % login)
+        return login, password
